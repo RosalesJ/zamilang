@@ -1,4 +1,6 @@
 open Lib
 
 let () =
-  print_endline Parse.parse
+  File.read_whole_file test_file
+  |> Parse.lex
+  |> ignore

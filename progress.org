@@ -1,0 +1,5 @@
+* Lexing
+- [ ] Escape characters for strings
+- [ ] Throwing an error at unidentified strings
+- [ ] Dealing with EOF somehoe
+- [ ] implement comments
