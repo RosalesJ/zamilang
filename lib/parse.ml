@@ -1,4 +1,5 @@
 open Angstrom
+open Common
 
 type keyword =
   | While
@@ -55,6 +56,11 @@ type token =
   | Identifier of string
   | Comment of string
   | EOF
+
+let is_whitespace = function ' ' | '\t' | '\n' -> true | _ -> false
+let is_digit = function '0' .. '9' -> true | _ -> false
+let is_alpha = function 'a' .. 'z' | 'A' .. 'Z' -> true | _ -> false
+let is_alphanum = is_digit <||> is_alpha
 
 let comma = char ',' *> return Comma
 let colon = char ':' *> return Colon
@@ -122,7 +128,7 @@ let do_k = string "do" *> return Do
 let of_k = string "of" *> return Of
 let nil_k = string "nil" *> return Nil
 
-let keyword = while_k
+let keyword = (while_k
            <|> for_k
            <|> to_k
            <|> break_k
@@ -138,19 +144,24 @@ let keyword = while_k
            <|> else_k
            <|> do_k
            <|> of_k
-           <|> nil_k
+           <|> nil_k)
+  >>= fun r ->
+  peek_char >>= function
+  | Some c when is_alphanum c -> fail "is not stuff"
+  | _ -> return r
+  
 
 (* TODO: Implement excape characters and more sophisticated strings *)
 let string_l = char '"' *> take_while (function '"' -> false | _ -> true) <* char '"'
   >>| fun s -> String s
 
-let int_l = take_while1 (function '0' .. '9' -> true | _ -> false)
+let int_l = take_while1 is_digit
   >>| fun n -> Int (int_of_string n)
 
 let literal = string_l <|> int_l
 
 
-let identifier = take_while1 (function 'a' .. 'z' | 'A' .. 'Z' | '0'.. '9' -> true | _ -> false)
+let identifier = take_while1 is_alphanum
   >>| fun id -> Identifier id
 
 
@@ -160,13 +171,9 @@ let token = (keyword >>| fun x -> Keyword x)
             <|> identifier
             (* <|> return EOF *)
 
-let is_whitespace = function ' ' | '\t' | '\n' -> true | _ -> false
-
 let spaces = take_while is_whitespace
 
 let lex str =
-  match parse_string (many (spaces *> token <* spaces)) str with
+  match parse_string (many (spaces *> token)) str with
   | Ok v -> v
   | Error msg -> failwith msg
-
-
