@@ -1,9 +1,10 @@
-
 let id x = x
 
 let compose f g x = f (g x)
 
 let (<.>) = compose
+
+let const x = fun _ -> x
 
 let flip f a b = f b a
 
