@@ -76,7 +76,7 @@ let reserved_operators =
    ("|", Or); (":=", Def)]
 
 let decide_reserved assoc =
-  assoc 
+  assoc
   |> List.map (function (a, b) -> string a *> return b)
   |> choice
 
@@ -117,6 +117,7 @@ let lex str =
 
 module Machine = struct
   type symbol = string
+
   type var = SimpleVar of symbol
            | FieldVar of var * symbol
            | SubscriptVar of var * exp
@@ -139,15 +140,17 @@ module Machine = struct
 
   and dec = FunctionDec of fundec list
           | VarDec of {name: symbol; excape: bool ref; typ: symbol option; init: exp}
-          | TypeDec of {name: symbol; ty: ty} list
+          | TypeDec of tydec list
 
-  and ty = NameTy of Symbol
+  and ty = NameTy of symbol
          | RecordTy of field list
-         | Arrayty of symbols
+         | Arrayty of symbol
 
   and oper = PlusOp | MinusOp | TimesOp | DivideOp | EqOp | NeqOp | LtOp | LeOp | GtOp | Greater
 
-  and field = {name: symbol; escape: bool ref; typ:symbol}
-              
-  and fundec = {name: symbol; params: field list; result: symbol option; body: exp}
+  and tydec = {tyname: symbol; typ: ty}
+
+  and field = {fname: symbol; escape: bool ref; ftyp:symbol }
+
+  and fundec = {funname: symbol; params: field list; result: symbol option; body: exp}
 end
