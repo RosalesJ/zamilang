@@ -1,0 +1,26 @@
+opam-version: "2.0"
+name: "zamilang"
+synopsis: "An ocaml implementation of the Tiger programming languages"
+version: "0.0.1"
+
+maintainer: "coby@case.edu"
+authors: ["Jacob Rosales Chase <coby@case.edu>"]
+license: "MIT"
+
+homepage: "https://github.com/RosalesJ/zamilang"
+bug-reports: "https://github.com/RosalesJ/zamilang/issues"
+dev-repo: "git+https://github.com/RosalesJ/zamilang.git"
+
+build: [
+  ["dune" "subst"] {pinned}
+  ["dune" "build" "-p" name "-j" jobs]
+]
+
+depends: [
+  "dune" {build}
+  "ppx_sexp_conv"
+  "ppx_compare"
+  "ppx_deriving"
+  "angstrom"
+  "ocaml" {>= "4.10.0"}
+  "core" {>= "v0.10.0"}]
