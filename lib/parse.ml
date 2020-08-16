@@ -2,156 +2,188 @@ open Core
 open Angstrom
 open Common
 
-type keyword =
-  | While
-  | For
-  | To
-  | Break
-  | Let
-  | In
-  | End
-  | Function
-  | Var
-  | Type
-  | Array
-  | If
-  | Then
-  | Else
-  | Do
-  | Of
-  | Nil
+open struct
+  let ( let* ) = Angstrom.(>>=)
+  let return = Angstrom.return
+end
 
-type operator =
-  | Comma
-  | Colon
-  | SemiColon
-  | R_Paren
-  | L_Paren
-  | R_Brack
-  | L_Brack
-  | R_Brace
-  | L_Brace
-  | Dot
-  | Plus
-  | Minus
-  | Times
-  | Slash
-  | Eq
-  | Not
-  | Less
-  | Less_Eq
-  | Greater
-  | Greater_Eq
-  | And
-  | Or
-  | Def
-
-type literal =
-  | Int of int
-  | String of string
-
-type token =
-  | Keyword of keyword
-  | Operator of operator
-  | Literal of literal
-  | Identifier of string
-  | Comment of string
-  | EOF
+let decide_reserved assoc =
+  assoc
+  |> List.map ~f:(fun (a, b) -> string b *> return a)
+  |> choice
 
 let is_whitespace = function ' ' | '\t' | '\n' -> true | _ -> false
 let is_digit = function '0' .. '9' -> true | _ -> false
 let is_alpha = function 'a' .. 'z' | 'A' .. 'Z' -> true | _ -> false
 let is_alphanum = is_digit <||> is_alpha
 
-let reserved_keywords =
-  [("while", While); ("for", For); ("to", To); ("break", Break); ("let", Let);
-   ("in", In); ("end", End); ("function", Function); ("var", Var); ("type", Type);
-   ("array", Array); ("if", If); ("then", Then); ("else", Else); ("do", Do);
-   ("of", Of); ("nil", Nil)]
-
-let reserved_operators =
-  [(",", Comma); (":", Colon); (";", R_Paren); (")", R_Paren); ("(", L_Paren);
-   ("]", R_Brack); ("[", L_Brack); ("}", R_Brace); ("{", L_Brace); (".", Dot);
-   ("+", Plus); ("-", Minus); ("*", Times); ("/", Slash); ("=", Eq); ("<>", Not);
-   ("<", Less); ("<=", Less_Eq); (">", Greater); (">=", Greater_Eq); ("&", And);
-   ("|", Or); (":=", Def)]
-
-let decide_reserved assoc =
-  assoc
-  |> List.map ~f:(function (a, b) -> string a *> return b)
-  |> choice
-
-let keyword = decide_reserved reserved_keywords
-  >>= fun r ->
-  peek_char >>= function
-  | Some c when is_alphanum c -> fail "Not a thing"
-  | _ -> return r
-
-let operator =  decide_reserved reserved_operators
-
 (* TODO: Implement excape characters and more sophisticated strings *)
 let string_l = char '"' *> take_while (function '"' -> false | _ -> true) <* char '"'
-  >>| fun s -> String s
 
 let int_l = take_while1 is_digit
-  >>| fun n -> Int (int_of_string n)
-
-let literal = string_l <|> int_l
-
 
 let identifier = take_while1 is_alphanum
-  >>| fun id -> Identifier id
-
-
-let token = (keyword >>| fun x -> Keyword x)
-            <|> (operator >>| fun x -> Operator x)
-            <|> (literal >>| fun x -> Literal x)
-            <|> identifier
-            (* <|> return EOF *)
 
 let spaces = take_while is_whitespace
 
-let lex str =
-  match parse_string ~consume:Consume.Prefix (many (spaces *> token)) str with
-  | Ok v -> v
-  | Error msg -> failwith msg
+module Keyword = struct
+  type t =
+    | While
+    | For
+    | To
+    | Break
+    | Let
+    | In
+    | End
+    | Function
+    | Var
+    | Type
+    | Array
+    | If
+    | Then
+    | Else
+    | Do
+    | Of
+    | Nil
 
-module Machine = struct
-  type symbol = string
+  let reserved_alist =
+    [(While, "while"); (For, "for"); (To, "to"); (Break, "break"); (Let, "let");
+     (In, "in"); (End, "end"); (Function, "function"); (Var, "var"); (Type, "type");
+     (Array, "array"); (If, "if"); (Then, "then"); (Else, "else"); (Do, "do");
+     (Of, "of"); (Nil, "nil")]
 
-  type var = SimpleVar of symbol
-           | FieldVar of var * symbol
-           | SubscriptVar of var * exp
+  let find_str = List.Assoc.find_exn reserved_alist ~equal:(phys_equal)
 
-  and exp = VarExp    of var
-          | NilExp
-          | IntExp    of int
-          | StringExp of string
-          | CallExp   of { func: symbol; args: exp list }
-          | OpExp     of { left: exp; oper: oper; right: exp }
-          | RecordExp of { fields: (symbol * exp) list; typ: symbol }
-          | SeqExp    of exp list
-          | AssignExp of { var: var; exp: exp }
-          | IfExp     of { test: exp; body: exp }
-          | WhileExp  of { test: exp; body: exp }
-          | ForExp    of { var: symbol; escape: bool ref; lo: exp; hi: exp; body: exp }
-          | BreakExp
-          | LetExp    of { decs: dec list; body: exp }
-          | ArrayExp  of { typ: symbol; size: exp; init: exp }
+  let parse =
+    let* reserved = decide_reserved reserved_alist in
+    let* next_char = peek_char in
+    match next_char with
+    | Some c when is_alphanum c -> fail "Not a keyword"
+    | _ -> return reserved
 
-  and dec = FunctionDec of fundec list
-          | VarDec of { name: symbol; escape: bool ref; typ: symbol option; init: exp }
-          | TypeDec of tydec list
-
-  and ty = NameTy of symbol
-         | RecordTy of field list
-         | Arrayty of symbol
-
-  and oper = PlusOp | MinusOp | TimesOp | DivideOp | EqOp | NeqOp | LtOp | LeOp | GtOp | Greater
-
-  and tydec = {tyname: symbol; typ: ty}
-
-  and field = {fname: symbol; escape: bool ref; ftyp:symbol }
-
-  and fundec = {funname: symbol; params: field list; result: symbol option; body: exp}
+let appear keyword =
+  let* found_keyword = parse in
+  if not (phys_equal found_keyword keyword) then
+    fail (Printf.sprintf "Unexpected keyword: `%s`" (find_str found_keyword))
+  else
+    return ()
 end
+
+module Operator = struct
+  type t =
+    | Comma
+    | Colon
+    | Semicolon
+    | R_Paren
+    | L_Paren
+    | R_Brack
+    | L_Brack
+    | R_Brace
+    | L_Brace
+    | Dot
+    | Plus
+    | Minus
+    | Times
+    | Slash
+    | Eq
+    | Not
+    | Less
+    | Less_Eq
+    | Greater
+    | Greater_Eq
+    | And
+    | Or
+    | Def
+
+  let reserved_alist = 
+    [(Comma, ","); (Def, ":="); (Colon, ":"); (Semicolon, ";"); (R_Paren, ")"); (L_Paren, "(");
+     (R_Brack, "]"); (L_Brack, "["); (R_Brace, "}"); (L_Brace, "{"); (Dot, ".");
+     (Plus, "+"); (Minus, "-"); (Times, "*"); (Slash, "/"); (Eq, "="); (Not, "<>");
+     (Less_Eq, "<="); (Less, "<"); (Greater_Eq, ">="); (Greater, ">"); (And, "&");
+     (Or, "|")]
+
+  let parse = decide_reserved reserved_alist
+
+  let find_str = List.Assoc.find_exn reserved_alist ~equal:(phys_equal)
+
+  let appear operator =
+    let* found_op = parse in
+    if not (phys_equal found_op operator) then
+      fail (Printf.sprintf "Unexpected operator: `%s`" (find_str found_op))
+    else
+      return ()
+end
+
+type literal =
+  | Int of int
+  | String of string
+
+type token =
+  | Keyword of Keyword.t
+  | Operator of Operator.t
+  | Literal of literal
+  | Identifier of string
+  | Comment of string
+  | EOF
+
+module AST = struct
+  module T = struct
+    type symbol = string
+
+    type var = VarSimple of symbol
+             | VarField of var * symbol
+             | VarSubscript of var * exp
+
+    and exp = ExpVar    of var
+            | ExpNil
+            | ExpInt    of int
+            | ExpString of string
+            | ExpCall   of { func: symbol; args: exp list }
+            | ExpOp     of { left: exp; oper: oper; right: exp }
+            | ExpRecord of { fields: (symbol * exp) list; typ: symbol }
+            | ExpSeq    of exp list
+            | ExpAssign of { var: var; exp: exp }
+            | ExpIf     of { test: exp; body: exp }
+            | ExpWhile  of { test: exp; body: exp }
+            | ExpFor    of { var: symbol; escape: bool ref; lo: exp; hi: exp; body: exp }
+            | ExpBreak
+            | ExpLet    of { decs: dec list; body: exp }
+            | ExpArray  of { typ: symbol; size: exp; init: exp }
+
+    and dec = DecFunction of fundec list
+            | DecVar of { name: symbol; escape: bool ref; typ: symbol option; init: exp }
+            | DecType of tydec list
+
+    and typ = TypName of symbol
+            | TypRecord of field list
+            | TypArray of symbol
+
+    and oper = PlusOp | MinusOp | TimesOp | DivideOp | EqOp | NeqOp | LtOp | LeOp | GtOp | Greater
+
+    and tydec = {tyname: symbol; typ: typ}
+
+    and field = {fname: symbol; escape: bool ref; ftyp:symbol }
+
+    and fundec = {funname: symbol; params: field list; result: symbol option; body: exp}
+  end
+
+  let (<|>) a b = (a ()) <|> (b ())
+
+  let exp_nil () = Keyword.(appear Nil) *> return T.ExpNil
+
+  let rec exp_for () =
+    let* var = Keyword.(appear For) *> spaces *> identifier <* spaces in
+    let* lo = Operator.(appear Def) *> spaces *> expression () <* spaces in
+    let* hi = Keyword.(appear To)   *> spaces *> expression () <* spaces in
+    let* body = Keyword.(appear Do) *> spaces *> expression () <* spaces in
+    let escape = ref false in
+    return (T.ExpFor {var; hi; lo; body; escape})
+
+  and expression () =
+    exp_nil <|> exp_for
+
+
+  let program = expression ()
+end
+
+let parse = parse_string AST.program ~consume:Consume.Prefix
