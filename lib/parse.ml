@@ -185,21 +185,15 @@ module AST = struct
     let* body = Keyword.(appear Do) *> spaces *> exp <* spaces in
     return (T.ExpWhile {test; body})
   
-  let exp_if_then exp =
+  let exp_if exp =
     let* test = Keyword.(appear If)   *> spaces *> exp <* spaces in
     let* body = Keyword.(appear Then) *> spaces *> exp <* spaces in
-    return (T.ExpIf {test; body; else_body=None})
-  
-  let exp_if_then_else exp =
-    let* test = Keyword.(appear If)   *> spaces *> exp <* spaces in
-    let* body = Keyword.(appear Then) *> spaces *> exp <* spaces in
-    let* else_body = Keyword.(appear Else) *> spaces *> exp <* spaces in
-    return (T.ExpIf {test; body; else_body=(Some else_body)})
+    let* else_body = option None ((Keyword.(appear Else) *> spaces *> exp <* spaces) >>| fun x -> Some x) in
+    return (T.ExpIf {test; body; else_body})
 
   let expression = exp_nil
                 <|> exp_break
-                <|> exp_if_then_else
-                <|> exp_if_then
+                <|> exp_if
                 <|> exp_for
                 <|> exp_while
                  |> fix
