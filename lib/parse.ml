@@ -167,39 +167,43 @@ module AST = struct
     and fundec = {funname: symbol; params: field list; result: symbol option; body: exp}
   end
 
-  let (<|>) a b = fun () -> (a ()) <|> (b ())
+  let (<|>) a b = fun exp -> a exp <|> b exp
 
-  let exp_nil () = Keyword.(appear Nil) *> return T.ExpNil
-  let exp_break () = Keyword.(appear Break) *> return T.ExpBreak
+  let exp_nil _ = Keyword.(appear Nil) *> return T.ExpNil
+  let exp_break _ = Keyword.(appear Break) *> return T.ExpBreak
 
-  let rec exp_for () =
+  let exp_for exp =
     let* var = Keyword.(appear For) *> spaces *> identifier <* spaces in
-    let* lo = Operator.(appear Def) *> spaces *> expression () <* spaces in
-    let* hi = Keyword.(appear To)   *> spaces *> expression () <* spaces in
-    let* body = Keyword.(appear Do) *> spaces *> expression () <* spaces in
+    let* lo = Operator.(appear Def) *> spaces *> exp <* spaces in
+    let* hi = Keyword.(appear To)   *> spaces *> exp <* spaces in
+    let* body = Keyword.(appear Do) *> spaces *> exp <* spaces in
     let escape = ref false in
     return (T.ExpFor {var; hi; lo; body; escape})
 
-  and exp_while () =
-    let* test = Keyword.(appear While) *> spaces *> expression () <* spaces in
-    let* body = Keyword.(appear Do) *> spaces *> expression () <* spaces in
+  let exp_while exp =
+    let* test = Keyword.(appear While) *> spaces *> exp <* spaces in
+    let* body = Keyword.(appear Do) *> spaces *> exp <* spaces in
     return (T.ExpWhile {test; body})
   
-  and exp_if_then () =
-    let* test = Keyword.(appear If) *> spaces *> expression () <* spaces in
-    let* body = Keyword.(appear Then) *> spaces *> expression () <* spaces in
+  let exp_if_then exp =
+    let* test = Keyword.(appear If)   *> spaces *> exp <* spaces in
+    let* body = Keyword.(appear Then) *> spaces *> exp <* spaces in
     return (T.ExpIf {test; body; else_body=None})
   
-  and exp_if_then_else () =
-    let* test = Keyword.(appear If) *> spaces *> expression () <* spaces in
-    let* body = Keyword.(appear Then) *> spaces *> expression () <* spaces in
-    let* else_body = Keyword.(appear Else) *> spaces *> expression () <* spaces in
-    return (T.ExpIf {test; body; else_body= (Some else_body)})
+  let exp_if_then_else exp =
+    let* test = Keyword.(appear If)   *> spaces *> exp <* spaces in
+    let* body = Keyword.(appear Then) *> spaces *> exp <* spaces in
+    let* else_body = Keyword.(appear Else) *> spaces *> exp <* spaces in
+    return (T.ExpIf {test; body; else_body=(Some else_body)})
 
-  and expression () = (exp_nil <|> exp_break <|> exp_for <|> exp_while <|> exp_if_then_else <|> exp_if_then) ()
+  let expression = exp_nil
+                <|> exp_break
+                <|> exp_if_then_else
+                <|> exp_if_then
+                <|> exp_for
+                <|> exp_while
+                 |> fix
 
-
-  let program = expression ()
 end
 
-let parse = parse_string AST.program ~consume:Consume.Prefix
+let parse = parse_string AST.expression ~consume:Consume.Prefix
