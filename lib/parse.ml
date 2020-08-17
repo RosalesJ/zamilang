@@ -143,7 +143,7 @@ module AST = struct
             | ExpRecord of { fields: (symbol * exp) list; typ: symbol }
             | ExpSeq    of exp list
             | ExpAssign of { var: var; exp: exp }
-            | ExpIf     of { test: exp; body: exp }
+            | ExpIf     of { test: exp; body: exp; else_body: exp option }
             | ExpWhile  of { test: exp; body: exp }
             | ExpFor    of { var: symbol; escape: bool ref; lo: exp; hi: exp; body: exp }
             | ExpBreak
@@ -167,9 +167,10 @@ module AST = struct
     and fundec = {funname: symbol; params: field list; result: symbol option; body: exp}
   end
 
-  let (<|>) a b = (a ()) <|> (b ())
+  let (<|>) a b = fun () -> (a ()) <|> (b ())
 
   let exp_nil () = Keyword.(appear Nil) *> return T.ExpNil
+  let exp_break () = Keyword.(appear Break) *> return T.ExpBreak
 
   let rec exp_for () =
     let* var = Keyword.(appear For) *> spaces *> identifier <* spaces in
@@ -179,8 +180,23 @@ module AST = struct
     let escape = ref false in
     return (T.ExpFor {var; hi; lo; body; escape})
 
-  and expression () =
-    exp_nil <|> exp_for
+  and exp_while () =
+    let* test = Keyword.(appear While) *> spaces *> expression () <* spaces in
+    let* body = Keyword.(appear Do) *> spaces *> expression () <* spaces in
+    return (T.ExpWhile {test; body})
+  
+  and exp_if_then () =
+    let* test = Keyword.(appear If) *> spaces *> expression () <* spaces in
+    let* body = Keyword.(appear Then) *> spaces *> expression () <* spaces in
+    return (T.ExpIf {test; body; else_body=None})
+  
+  and exp_if_then_else () =
+    let* test = Keyword.(appear If) *> spaces *> expression () <* spaces in
+    let* body = Keyword.(appear Then) *> spaces *> expression () <* spaces in
+    let* else_body = Keyword.(appear Else) *> spaces *> expression () <* spaces in
+    return (T.ExpIf {test; body; else_body= (Some else_body)})
+
+  and expression () = (exp_nil <|> exp_break <|> exp_for <|> exp_while <|> exp_if_then_else <|> exp_if_then) ()
 
 
   let program = expression ()
