@@ -23,8 +23,9 @@ let string_l = char '"' *> take_while (function '"' -> false | _ -> true) <* cha
 let int_l = take_while1 is_digit
 
 let identifier = take_while1 is_alphanum
+let type_id = identifier
 
-let spaces = take_while is_whitespace
+let spaces = skip_while is_whitespace
 
 module Keyword = struct
   type t =
@@ -172,32 +173,73 @@ module AST = struct
   let exp_nil _ = Keyword.(appear Nil) *> return T.ExpNil
   let exp_break _ = Keyword.(appear Break) *> return T.ExpBreak
 
+  let rec var_exp exp =
+    let simple _ =
+      let* name = identifier <* spaces in
+      return T.(VarSimple name)
+    in
+    let subscript var =
+      let* arr = var <* spaces in
+      let* index = Operator.(appear L_Brack) *> spaces *> exp <* spaces <* Operator.(appear L_Brack) <* spaces in
+      return T.(VarSubscript (arr, index))
+    in
+    let field var =
+      let* record = var <* spaces in
+      let* field_name = Operator.(appear Dot) *> spaces *> identifier <* spaces in
+      return T.(VarField (record, field_name))
+    in
+    simple <|> subscript <|> field |> fix
+
+  let exp_assign exp =
+    let* var = var_exp exp <* spaces in
+    let* exp = Operator.(appear Def) *> spaces *> exp <* spaces in
+
+    return T.(ExpAssign {var; exp})
+
+  let arr_create exp =
+    let* typ = type_id <* spaces in
+    let* size = Operator.(appear L_Brack) *> spaces *> exp <* spaces <* Operator.(appear L_Brack) in
+    let* init = spaces *> Keyword.(appear Of) *> spaces *> exp <* spaces in
+    return T.(ExpArray {typ; size; init})
+
+  let record_create exp =
+    let field =
+      let* field_id = spaces *> identifier in
+      let* field_val = spaces *> exp <* spaces in
+      return (field_id, field_val)
+    in
+    let* typ = type_id <* spaces in
+    let* fields = Operator.(appear L_Brace) *> spaces *> many field <* spaces <* Operator.(appear L_Brace) in
+    return T.(ExpRecord {fields; typ})
+
   let exp_for exp =
     let* var = Keyword.(appear For) *> spaces *> identifier <* spaces in
     let* lo = Operator.(appear Def) *> spaces *> exp <* spaces in
     let* hi = Keyword.(appear To)   *> spaces *> exp <* spaces in
     let* body = Keyword.(appear Do) *> spaces *> exp <* spaces in
     let escape = ref false in
-    return (T.ExpFor {var; hi; lo; body; escape})
+    return T.(ExpFor {var; hi; lo; body; escape})
 
   let exp_while exp =
     let* test = Keyword.(appear While) *> spaces *> exp <* spaces in
     let* body = Keyword.(appear Do) *> spaces *> exp <* spaces in
-    return (T.ExpWhile {test; body})
+    return T.(ExpWhile {test; body})
   
   let exp_if exp =
     let* test = Keyword.(appear If)   *> spaces *> exp <* spaces in
     let* body = Keyword.(appear Then) *> spaces *> exp <* spaces in
     let* else_body = option None ((Keyword.(appear Else) *> spaces *> exp <* spaces) >>| fun x -> Some x) in
-    return (T.ExpIf {test; body; else_body})
+    return T.(ExpIf {test; body; else_body})
 
   let expression = exp_nil
                 <|> exp_break
                 <|> exp_if
                 <|> exp_for
                 <|> exp_while
+                <|> exp_assign
+                <|> arr_create
+                <|> record_create
                  |> fix
-
 end
 
 let parse = parse_string AST.expression ~consume:Consume.Prefix
