@@ -22,6 +22,7 @@ let string_l = char '"' *> take_while (function '"' -> false | _ -> true) <* cha
 
 let int_l = take_while1 is_digit
 
+(* TODO: Fix these identifier parsers to include underscores and what not *)
 let identifier = take_while1 is_alphanum
 let type_id = identifier
 
@@ -168,12 +169,21 @@ module AST = struct
     and fundec = {funname: symbol; params: field list; result: symbol option; body: exp}
   end
 
-  let (<|>) a b = fun exp -> a exp <|> b exp
+  let (<|>) a b = fun x -> a x <|> b x
 
   let exp_nil _ = Keyword.(appear Nil) *> return T.ExpNil
   let exp_break _ = Keyword.(appear Break) *> return T.ExpBreak
 
-  let rec var_exp exp =
+  let exp_seq exp =
+    let* seq = Operator.(appear L_Paren) *> sep_by Operator.(appear Comma) exp <* Operator.(appear R_Paren) in
+    return T.(ExpSeq seq)
+
+  let exp_call exp =
+    let* func = identifier <* spaces in
+    let* args = Operator.(appear L_Paren) *> sep_by Operator.(appear Comma) exp <* Operator.(appear R_Paren) in
+    return T.(ExpCall {func; args})
+
+  let var_exp exp =
     let simple _ =
       let* name = identifier <* spaces in
       return T.(VarSimple name)
@@ -193,7 +203,6 @@ module AST = struct
   let exp_assign exp =
     let* var = var_exp exp <* spaces in
     let* exp = Operator.(appear Def) *> spaces *> exp <* spaces in
-
     return T.(ExpAssign {var; exp})
 
   let arr_create exp =
@@ -232,14 +241,17 @@ module AST = struct
     return T.(ExpIf {test; body; else_body})
 
   let expression = exp_nil
-                <|> exp_break
-                <|> exp_if
-                <|> exp_for
-                <|> exp_while
-                <|> exp_assign
-                <|> arr_create
-                <|> record_create
-                 |> fix
+                   <|> exp_break
+                   <|> exp_if
+                   <|> exp_for
+                   <|> exp_while
+                   <|> exp_assign
+                   <|> arr_create
+                   <|> record_create
+                   |> fix
 end
 
-let parse = parse_string AST.expression ~consume:Consume.Prefix
+let parse str =
+  match parse_string AST.expression ~consume:Consume.Prefix str with
+  | Ok res -> res
+  | Error e -> failwith e
