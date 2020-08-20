@@ -23,10 +23,11 @@ let string_l = char '"' *> take_while (function '"' -> false | _ -> true) <* cha
 let int_l = take_while1 is_digit
 
 (* TODO: Fix these identifier parsers to include underscores and what not *)
-let identifier = take_while1 is_alphanum
-let type_id = identifier
 
 let spaces = skip_while is_whitespace
+
+let identifier = spaces *> take_while1 is_alphanum
+let type_id = identifier
 
 module Keyword = struct
   type t =
@@ -57,13 +58,13 @@ module Keyword = struct
   let find_str = List.Assoc.find_exn reserved_alist ~equal:(phys_equal)
 
   let parse =
-    let* reserved = decide_reserved reserved_alist in
+    let* reserved = spaces *> decide_reserved reserved_alist in
     let* next_char = peek_char in
     match next_char with
     | Some c when is_alphanum c -> fail "Not a keyword"
     | _ -> return reserved
 
-let appear keyword =
+let token keyword =
   let* found_keyword = parse in
   if not (phys_equal found_keyword keyword) then
     fail (Printf.sprintf "Unexpected keyword: `%s`" (find_str found_keyword))
@@ -104,11 +105,11 @@ module Operator = struct
      (Less_Eq, "<="); (Less, "<"); (Greater_Eq, ">="); (Greater, ">"); (And, "&");
      (Or, "|")]
 
-  let parse = decide_reserved reserved_alist
+  let parse = spaces *> decide_reserved reserved_alist
 
   let find_str = List.Assoc.find_exn reserved_alist ~equal:(phys_equal)
 
-  let appear operator =
+  let token operator =
     let* found_op = parse in
     if not (phys_equal found_op operator) then
       fail (Printf.sprintf "Unexpected operator: `%s`" (find_str found_op))
@@ -129,6 +130,9 @@ type token =
   | EOF
 
 module AST = struct
+  module Op = Operator
+  module Kw = Keyword
+  
   module T = struct
     type symbol = string
 
@@ -171,73 +175,73 @@ module AST = struct
 
   let (<|>) a b = fun x -> a x <|> b x
 
-  let exp_nil _ = Keyword.(appear Nil) *> return T.ExpNil
-  let exp_break _ = Keyword.(appear Break) *> return T.ExpBreak
+  let exp_nil _ = Kw.(token Nil) *> return T.ExpNil
+  let exp_break _ = Kw.(token Break) *> return T.ExpBreak
 
   let exp_seq exp =
-    let* seq = Operator.(appear L_Paren) *> sep_by Operator.(appear Comma) exp <* Operator.(appear R_Paren) in
+    let* seq = Op.(token L_Paren) *> sep_by Op.(token Comma) exp <* Op.(token R_Paren) in
     return T.(ExpSeq seq)
 
   let exp_call exp =
-    let* func = identifier <* spaces in
-    let* args = Operator.(appear L_Paren) *> sep_by Operator.(appear Comma) exp <* Operator.(appear R_Paren) in
+    let* func = identifier in
+    let* args = Op.(token L_Paren) *> sep_by Op.(token Comma) exp <* Op.(token R_Paren) in
     return T.(ExpCall {func; args})
 
   let var_exp exp =
     let simple _ =
-      let* name = identifier <* spaces in
+      let* name = identifier in
       return T.(VarSimple name)
     in
     let subscript var =
-      let* arr = var <* spaces in
-      let* index = Operator.(appear L_Brack) *> spaces *> exp <* spaces <* Operator.(appear L_Brack) <* spaces in
+      let* arr = var in
+      let* index = Op.(token L_Brack) *> exp <* Op.(token L_Brack) in
       return T.(VarSubscript (arr, index))
     in
     let field var =
-      let* record = var <* spaces in
-      let* field_name = Operator.(appear Dot) *> spaces *> identifier <* spaces in
+      let* record = var in
+      let* field_name = Op.(token Dot) *> identifier in
       return T.(VarField (record, field_name))
     in
     simple <|> subscript <|> field |> fix
 
   let exp_assign exp =
-    let* var = var_exp exp <* spaces in
-    let* exp = Operator.(appear Def) *> spaces *> exp <* spaces in
+    let* var = var_exp exp in
+    let* exp = Op.(token Def) *> exp in
     return T.(ExpAssign {var; exp})
 
   let arr_create exp =
-    let* typ = type_id <* spaces in
-    let* size = Operator.(appear L_Brack) *> spaces *> exp <* spaces <* Operator.(appear L_Brack) in
-    let* init = spaces *> Keyword.(appear Of) *> spaces *> exp <* spaces in
+    let* typ = type_id in
+    let* size = Op.(token L_Brack) *> exp <* Op.(token L_Brack) in
+    let* init = Kw.(token Of) *> exp in
     return T.(ExpArray {typ; size; init})
 
   let record_create exp =
     let field =
-      let* field_id = spaces *> identifier in
-      let* field_val = spaces *> exp <* spaces in
+      let* field_id = identifier in
+      let* field_val = exp in
       return (field_id, field_val)
     in
-    let* typ = type_id <* spaces in
-    let* fields = Operator.(appear L_Brace) *> spaces *> many field <* spaces <* Operator.(appear L_Brace) in
+    let* typ = type_id in
+    let* fields = Op.(token L_Brace) *> many field <* Op.(token L_Brace) in
     return T.(ExpRecord {fields; typ})
 
   let exp_for exp =
-    let* var = Keyword.(appear For) *> spaces *> identifier <* spaces in
-    let* lo = Operator.(appear Def) *> spaces *> exp <* spaces in
-    let* hi = Keyword.(appear To)   *> spaces *> exp <* spaces in
-    let* body = Keyword.(appear Do) *> spaces *> exp <* spaces in
+    let* var = Kw.(token For) *> identifier in
+    let* lo = Op.(token Def) *> exp in
+    let* hi = Kw.(token To) *> exp in
+    let* body = Kw.(token Do) *> exp in
     let escape = ref false in
     return T.(ExpFor {var; hi; lo; body; escape})
 
   let exp_while exp =
-    let* test = Keyword.(appear While) *> spaces *> exp <* spaces in
-    let* body = Keyword.(appear Do) *> spaces *> exp <* spaces in
+    let* test = Kw.(token While) *> exp in
+    let* body = Kw.(token Do) *> exp in
     return T.(ExpWhile {test; body})
   
   let exp_if exp =
-    let* test = Keyword.(appear If)   *> spaces *> exp <* spaces in
-    let* body = Keyword.(appear Then) *> spaces *> exp <* spaces in
-    let* else_body = option None ((Keyword.(appear Else) *> spaces *> exp <* spaces) >>| fun x -> Some x) in
+    let* test = Kw.(token If) *> exp in
+    let* body = Kw.(token Then) *> exp in
+    let* else_body = option None ((Kw.(token Else) *> exp) >>| fun x -> Some x) in
     return T.(ExpIf {test; body; else_body})
 
   let expression = exp_nil
@@ -246,12 +250,11 @@ module AST = struct
                    <|> exp_for
                    <|> exp_while
                    <|> exp_assign
+                   <|> exp_call
+                   <|> exp_seq
                    <|> arr_create
                    <|> record_create
                    |> fix
 end
 
-let parse str =
-  match parse_string AST.expression ~consume:Consume.Prefix str with
-  | Ok res -> res
-  | Error e -> failwith e
+let parse = parse_string AST.expression ~consume:Consume.Prefix
