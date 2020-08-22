@@ -64,10 +64,12 @@ module Keyword = struct
     | Some c when is_alphanum c -> fail "Not a keyword"
     | _ -> return reserved
 
-let token keyword =
+let token expected =
   let* found_keyword = parse in
-  if not (phys_equal found_keyword keyword) then
-    fail (Printf.sprintf "Unexpected keyword: `%s`" (find_str found_keyword))
+  if not (phys_equal found_keyword expected) then
+    fail (Printf.sprintf "Unexpected keyword: expected '%s' but found '%s'"
+            (find_str expected)
+            (find_str found_keyword))
   else
     return ()
 end
@@ -109,10 +111,12 @@ module Operator = struct
 
   let find_str = List.Assoc.find_exn reserved_alist ~equal:(phys_equal)
 
-  let token operator =
+  let token expected =
     let* found_op = parse in
-    if not (phys_equal found_op operator) then
-      fail (Printf.sprintf "Unexpected operator: `%s`" (find_str found_op))
+    if not (phys_equal found_op expected) then
+      fail (Printf.sprintf "Unexpected operator: expected '%s' but found '%s'"
+              (find_str expected)
+              (find_str found_op))
     else
       return ()
 end
@@ -179,7 +183,7 @@ module AST = struct
   let exp_break _ = Kw.(token Break) *> return T.ExpBreak
 
   let exp_seq exp =
-    let* seq = Op.(token L_Paren) *> sep_by Op.(token Comma) exp <* Op.(token R_Paren) in
+    let* seq = Op.(token L_Paren) *> sep_by Op.(token Semicolon) exp <* Op.(token R_Paren) in
     return T.(ExpSeq seq)
 
   let exp_call exp =
@@ -194,7 +198,7 @@ module AST = struct
     in
     let subscript var =
       let* arr = var in
-      let* index = Op.(token L_Brack) *> exp <* Op.(token L_Brack) in
+      let* index = Op.(token L_Brack) *> exp <* Op.(token R_Brack) in
       return T.(VarSubscript (arr, index))
     in
     let field var =
@@ -202,7 +206,7 @@ module AST = struct
       let* field_name = Op.(token Dot) *> identifier in
       return T.(VarField (record, field_name))
     in
-    simple <|> subscript <|> field |> fix
+    simple <|> field <|> subscript |> fix
 
   let exp_assign exp =
     let* var = var_exp exp in
@@ -211,18 +215,18 @@ module AST = struct
 
   let arr_create exp =
     let* typ = type_id in
-    let* size = Op.(token L_Brack) *> exp <* Op.(token L_Brack) in
+    let* size = Op.(token L_Brack) *> exp <* Op.(token R_Brack) in
     let* init = Kw.(token Of) *> exp in
     return T.(ExpArray {typ; size; init})
 
   let record_create exp =
     let field =
       let* field_id = identifier in
-      let* field_val = exp in
+      let* field_val = Op.(token Eq) *> exp in
       return (field_id, field_val)
     in
     let* typ = type_id in
-    let* fields = Op.(token L_Brace) *> many field <* Op.(token L_Brace) in
+    let* fields = Op.(token L_Brace) *> sep_by Op.(token Comma) field <* Op.(token R_Brace) in
     return T.(ExpRecord {fields; typ})
 
   let exp_for exp =
@@ -244,7 +248,12 @@ module AST = struct
     let* else_body = option None ((Kw.(token Else) *> exp) >>| fun x -> Some x) in
     return T.(ExpIf {test; body; else_body})
 
+  let int_lit _ = spaces *> int_l >>| fun x -> T.(ExpInt (Int.of_string x))
+  let str_lit _ = spaces *> string_l >>| fun x -> T.(ExpString x)
+
   let expression = exp_nil
+                   <|> int_lit
+                   <|> str_lit
                    <|> exp_break
                    <|> exp_if
                    <|> exp_for
