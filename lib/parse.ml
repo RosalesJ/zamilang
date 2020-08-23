@@ -191,22 +191,23 @@ module AST = struct
     let* args = Op.(token L_Paren) *> sep_by Op.(token Comma) exp <* Op.(token R_Paren) in
     return T.(ExpCall {func; args})
 
+  (* TODO: Make the use fix instead of this hackiness *)
   let var_exp exp =
-    let simple _ =
-      let* name = identifier in
-      return T.(VarSimple name)
-    in
-    let subscript var =
-      let* arr = var in
+    let rec recurse var = 
+      let* c = peek_char_fail in
+      match c with
+      | '[' -> subscript var
+      | '.' -> field var
+      | _ -> return var
+    and subscript var =
       let* index = Op.(token L_Brack) *> exp <* Op.(token R_Brack) in
-      return T.(VarSubscript (arr, index))
+      recurse T.(VarSubscript (var, index))
+    and field var =
+      let* id = Op.(token Dot) *> identifier in
+      recurse T.(VarField (var, id))
     in
-    let field var =
-      let* record = var in
-      let* field_name = Op.(token Dot) *> identifier in
-      return T.(VarField (record, field_name))
-    in
-    simple <|> field <|> subscript |> fix
+    let* id = identifier in
+    recurse T.(VarSimple id)
 
   let exp_assign exp =
     let* var = var_exp exp in
