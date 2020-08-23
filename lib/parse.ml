@@ -157,12 +157,12 @@ module AST = struct
             | ExpWhile  of { test: exp; body: exp }
             | ExpFor    of { var: symbol; escape: bool ref; lo: exp; hi: exp; body: exp }
             | ExpBreak
-            | ExpLet    of { decs: dec list; body: exp }
+            | ExpLet    of { decs: dec list; body: exp list }
             | ExpArray  of { typ: symbol; size: exp; init: exp }
 
     and dec = DecFunction of fundec list
             | DecVar of { name: symbol; escape: bool ref; typ: symbol option; init: exp }
-            | DecType of tydec list
+            | DecType of { tyname: symbol; typ: typ }
 
     and typ = TypName of symbol
             | TypRecord of field list
@@ -170,14 +170,37 @@ module AST = struct
 
     and oper = PlusOp | MinusOp | TimesOp | DivideOp | EqOp | NeqOp | LtOp | LeOp | GtOp | Greater
 
-    and tydec = {tyname: symbol; typ: typ}
-
     and field = {fname: symbol; escape: bool ref; ftyp:symbol }
 
     and fundec = {funname: symbol; params: field list; result: symbol option; body: exp}
   end
 
   let (<|>) a b = fun x -> a x <|> b x
+
+  let field_dec =
+    let* fname = identifier <* Op.(token Colon) in
+    let* ftyp = type_id in
+    let escape = ref false in
+    return T.({ fname; escape; ftyp })
+
+  let ty =
+    let open Angstrom in
+    let arr_ty = Kw.(token Array *> token Of) *> type_id >>| fun x -> T.TypArray x in
+    let rec_ty = Op.(token L_Brace *> sep_by (token Comma) field_dec <* token R_Brace) >>| fun x -> T.TypRecord x in
+    let name_ty = type_id >>| fun x -> T.TypName x in
+    arr_ty <|> rec_ty <|> name_ty
+
+  let ty_dec =
+    let* tyname = Kw.(token Type) *> type_id in
+    let* typ = Op.(token Eq) *> ty in
+    return T.(DecType {tyname; typ})
+
+  let dec = ty_dec
+
+  let exp_let exp =
+    let* decs = Kw.(token Let) *> many1 dec <* Kw.(token In) in
+    let* body = sep_by Op.(token Semicolon) exp <* Kw.(token End) in
+    return T.(ExpLet { decs; body})
 
   let exp_nil _ = Kw.(token Nil) *> return T.ExpNil
   let exp_break _ = Kw.(token Break) *> return T.ExpBreak
@@ -262,6 +285,7 @@ module AST = struct
                    <|> exp_assign
                    <|> exp_call
                    <|> exp_seq
+                   <|> exp_let
                    <|> arr_create
                    <|> record_create
                    |> fix
