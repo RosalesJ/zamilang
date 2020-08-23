@@ -160,7 +160,7 @@ module AST = struct
             | ExpLet    of { decs: dec list; body: exp list }
             | ExpArray  of { typ: symbol; size: exp; init: exp }
 
-    and dec = DecFunction of fundec list
+    and dec = DecFunction of {funname: symbol; params: field list; result: symbol option; body: exp}
             | DecVar of { name: symbol; escape: bool ref; typ: symbol option; init: exp }
             | DecType of { tyname: symbol; typ: typ }
 
@@ -171,8 +171,6 @@ module AST = struct
     and oper = PlusOp | MinusOp | TimesOp | DivideOp | EqOp | NeqOp | LtOp | LeOp | GtOp | Greater
 
     and field = {fname: symbol; escape: bool ref; ftyp:symbol }
-
-    and fundec = {funname: symbol; params: field list; result: symbol option; body: exp}
   end
 
   let (<|>) a b = fun x -> a x <|> b x
@@ -182,6 +180,23 @@ module AST = struct
     let* ftyp = type_id in
     let escape = ref false in
     return T.({ fname; escape; ftyp })
+  
+  let type_decorator = option None (Op.(token Colon) *> type_id >>| fun x -> Some x)
+
+  let var_dec exp =
+    let* name = Kw.(token Var) *> identifier in
+    let* typ = type_decorator in
+    let* init = Op.(token Def) *> exp in
+    let escape = ref false in
+    return T.(DecVar { name; typ; init; escape })
+    
+
+  let fun_dec exp =
+    let* funname = Kw.(token Function) *> identifier in
+    let* params = Op.(token L_Paren *> sep_by (token Comma) field_dec <* token R_Paren) in
+    let* result = type_decorator in
+    let* body = Op.(token Eq) *> exp in
+    return T.(DecFunction { funname; params; result; body })
 
   let ty =
     let open Angstrom in
@@ -190,15 +205,15 @@ module AST = struct
     let name_ty = type_id >>| fun x -> T.TypName x in
     arr_ty <|> rec_ty <|> name_ty
 
-  let ty_dec =
+  let ty_dec _ =
     let* tyname = Kw.(token Type) *> type_id in
     let* typ = Op.(token Eq) *> ty in
     return T.(DecType {tyname; typ})
 
-  let dec = ty_dec
+  let dec = ty_dec <|> fun_dec <|> var_dec
 
   let exp_let exp =
-    let* decs = Kw.(token Let) *> many1 dec <* Kw.(token In) in
+    let* decs = Kw.(token Let) *> many1 (dec exp) <* Kw.(token In) in
     let* body = sep_by Op.(token Semicolon) exp <* Kw.(token End) in
     return T.(ExpLet { decs; body})
 
