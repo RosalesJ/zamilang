@@ -140,19 +140,20 @@ module AST = struct
   module T = struct
     type symbol = string
 
-    type var = VarSimple of symbol
-             | VarField of var * symbol
-             | VarSubscript of var * exp
+    type lvalue = LvalueSimple of symbol
+             | LvalueField of lvalue * symbol
+             | LvalueSubscript of lvalue * exp
 
-    and exp = ExpVar    of var
+    and exp = ExpLvalue    of lvalue
             | ExpNil
             | ExpInt    of int
             | ExpString of string
             | ExpCall   of { func: symbol; args: exp list }
+            | ExpInfix  of { left: exp; op: oper; right: exp }
             | ExpOp     of { left: exp; oper: oper; right: exp }
             | ExpRecord of { fields: (symbol * exp) list; typ: symbol }
             | ExpSeq    of exp list
-            | ExpAssign of { var: var; exp: exp }
+            | ExpAssign of { var: lvalue; exp: exp }
             | ExpIf     of { test: exp; body: exp; else_body: exp option }
             | ExpWhile  of { test: exp; body: exp }
             | ExpFor    of { var: symbol; escape: bool ref; lo: exp; hi: exp; body: exp }
@@ -168,12 +169,33 @@ module AST = struct
             | TypRecord of field list
             | TypArray of symbol
 
-    and oper = PlusOp | MinusOp | TimesOp | DivideOp | EqOp | NeqOp | LtOp | LeOp | GtOp | Greater
+    and oper = PlusOp | MinusOp | TimesOp | DivideOp | EqOp | NeqOp | LtOp | LeOp | GtOp | GeOp
 
     and field = {fname: symbol; escape: bool ref; ftyp:symbol }
+
+    let oper_of_op =
+      let open Operator in
+      function
+      | Plus       -> PlusOp
+      | Minus      -> MinusOp
+      | Times      -> TimesOp
+      | Slash      -> DivideOp
+      | Eq         -> EqOp
+      | Not        -> NeqOp
+      | Less       -> LtOp
+      | Less_Eq    -> LeOp
+      | Greater    -> GtOp
+      | Greater_Eq -> GeOp
+      | x          -> failwith (Printf.sprintf "No infix operator associated with '%s'" (Operator.find_str x))
   end
 
   let (<|>) a b = fun x -> a x <|> b x
+
+  let exp_infix exp =
+    let* left = exp in
+    let* op = Op.parse >>| T.oper_of_op in
+    let* right = exp in
+    return T.(ExpInfix { left; op; right })
 
   let field_dec =
     let* fname = identifier <* Op.(token Colon) in
@@ -230,7 +252,7 @@ module AST = struct
     return T.(ExpCall {func; args})
 
   (* TODO: Make the use fix instead of this hackiness *)
-  let var_exp exp =
+  let lvalue exp =
     let rec recurse var = 
       let* c = peek_char_fail in
       match c with
@@ -239,16 +261,18 @@ module AST = struct
       | _ -> return var
     and subscript var =
       let* index = Op.(token L_Brack) *> exp <* Op.(token R_Brack) in
-      recurse T.(VarSubscript (var, index))
+      recurse T.(LvalueSubscript (var, index))
     and field var =
       let* id = Op.(token Dot) *> identifier in
-      recurse T.(VarField (var, id))
+      recurse T.(LvalueField (var, id))
     in
     let* id = identifier in
-    recurse T.(VarSimple id)
+    recurse T.(LvalueSimple id)
+
+  let exp_lvalue exp = lvalue exp >>| fun x -> T.ExpLvalue x
 
   let exp_assign exp =
-    let* var = var_exp exp in
+    let* var = lvalue exp in
     let* exp = Op.(token Def) *> exp in
     return T.(ExpAssign {var; exp})
 
@@ -303,6 +327,7 @@ module AST = struct
                    <|> exp_let
                    <|> arr_create
                    <|> record_create
+                   <|> exp_lvalue
                    |> fix
 end
 
