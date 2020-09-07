@@ -12,6 +12,19 @@ let decide_reserved assoc =
   |> List.map ~f:(fun (a, b) -> string b *> return a)
   |> choice
 
+let peek_reserved assoc =
+  let f accum (typ, keyword) =
+    let* acc = accum in
+    match acc with
+    | Some _ as x -> return x
+    | None ->
+       let* result = peek_string (String.length keyword) in
+       if String.(result = keyword) then
+         return (Some typ)
+       else return None
+  in
+  List.fold ~f ~init:(return None) assoc
+
 let is_whitespace = function ' ' | '\t' | '\n' -> true | _ -> false
 let is_digit = function '0' .. '9' -> true | _ -> false
 let is_alpha = function 'a' .. 'z' | 'A' .. 'Z' -> true | _ -> false
@@ -64,14 +77,16 @@ module Keyword = struct
     | Some c when is_alphanum c -> fail "Not a keyword"
     | _ -> return reserved
 
-let token expected =
-  let* found_keyword = parse in
-  if not (phys_equal found_keyword expected) then
-    fail (Printf.sprintf "Unexpected keyword: expected '%s' but found '%s'"
-            (find_str expected)
-            (find_str found_keyword))
-  else
-    return ()
+  let peek = spaces *> peek_reserved reserved_alist
+
+  let token expected =
+    let* found_keyword = parse in
+    if not (phys_equal found_keyword expected) then
+      fail (Printf.sprintf "Unexpected keyword: expected '%s' but found '%s'"
+              (find_str expected)
+              (find_str found_keyword))
+    else
+      return ()
 end
 
 module Operator = struct
@@ -108,6 +123,8 @@ module Operator = struct
      (Or, "|")]
 
   let parse = spaces *> decide_reserved reserved_alist
+
+  let peek = spaces *> peek_reserved reserved_alist
 
   let find_str = List.Assoc.find_exn reserved_alist ~equal:(phys_equal)
 
@@ -149,7 +166,6 @@ module AST = struct
             | ExpInt    of int
             | ExpString of string
             | ExpCall   of { func: symbol; args: exp list }
-            | ExpInfix  of { left: exp; op: oper; right: exp }
             | ExpOp     of { left: exp; oper: oper; right: exp }
             | ExpRecord of { fields: (symbol * exp) list; typ: symbol }
             | ExpSeq    of exp list
@@ -190,12 +206,6 @@ module AST = struct
   end
 
   let (<|>) a b = fun x -> a x <|> b x
-
-  let exp_infix exp =
-    let* left = exp in
-    let* op = Op.parse >>| T.oper_of_op in
-    let* right = exp in
-    return T.(ExpInfix { left; op; right })
 
   let field_dec =
     let* fname = identifier <* Op.(token Colon) in
@@ -329,6 +339,19 @@ module AST = struct
                    <|> record_create
                    <|> exp_lvalue
                    |> fix
+
+  let exp_oper texp =
+    let* left = expression in
+    let* op = option None Op.peek in
+    match op with
+    | None -> return left
+    | Some _ ->
+       let* op = Op.parse in
+       let* right = texp in
+       let oper = T.oper_of_op op in
+       return T.(ExpOp {left; oper; right})
+
+  let top = fix exp_oper
 end
 
-let parse = parse_string AST.expression ~consume:Consume.Prefix
+let parse = parse_string AST.top ~consume:Consume.Prefix
