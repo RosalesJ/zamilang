@@ -190,24 +190,25 @@ module AST = struct
             | TypRecord of field list
             | TypArray of symbol
 
-    and oper = PlusOp | MinusOp | TimesOp | DivideOp | EqOp | NeqOp | LtOp | LeOp | GtOp | GeOp
+    and oper = PlusOp | MinusOp | TimesOp | DivideOp | EqOp | NeqOp | LtOp | LeOp | GtOp | GeOp | AndOp
 
     and field = {fname: symbol; escape: bool ref; ftyp:symbol }
 
     let oper_of_op =
       let open Operator in
       function
-      | Plus       -> PlusOp
-      | Minus      -> MinusOp
-      | Times      -> TimesOp
-      | Slash      -> DivideOp
-      | Eq         -> EqOp
-      | Not        -> NeqOp
-      | Less       -> LtOp
-      | Less_Eq    -> LeOp
-      | Greater    -> GtOp
-      | Greater_Eq -> GeOp
-      | x          -> failwith (Printf.sprintf "No infix operator associated with '%s'" (Operator.find_str x))
+      | Plus       -> Some PlusOp
+      | Minus      -> Some MinusOp
+      | Times      -> Some TimesOp
+      | Slash      -> Some DivideOp
+      | Eq         -> Some EqOp
+      | Not        -> Some NeqOp
+      | Less       -> Some LtOp
+      | Less_Eq    -> Some LeOp
+      | Greater    -> Some GtOp
+      | Greater_Eq -> Some GeOp
+      | And        -> Some AndOp
+      | _          -> None
   end
 
   let (<|>) a b = fun x -> a x <|> b x
@@ -345,13 +346,17 @@ module AST = struct
                    <|> exp_lvalue
 
   let rec exp_oper exp =
+    let oper_peek : T.oper option t =
+      let* x = Op.peek in
+      let z = Option.bind ~f:(T.oper_of_op) x in
+      return z
+    in
     let* left = expression exp in
-    let* op = option None Op.peek in
+    let* op = option None oper_peek in
     match op with
     | None -> return left
-    | Some _ ->
-       let* op = Op.parse in
-       let oper = T.oper_of_op op in
+    | Some oper ->
+       let* _ = Op.parse in
        let* right = exp_oper exp in
        return T.(ExpOp {left; oper; right})
 
