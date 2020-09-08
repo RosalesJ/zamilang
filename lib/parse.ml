@@ -39,9 +39,6 @@ let int_l = take_while1 is_digit
 
 let spaces = skip_while is_whitespace
 
-let identifier = spaces *> take_while1 is_alphanum
-let type_id = identifier
-
 module Keyword = struct
   type t =
     | While
@@ -68,7 +65,7 @@ module Keyword = struct
      (Array, "array"); (If, "if"); (Then, "then"); (Else, "else"); (Do, "do");
      (Of, "of"); (Nil, "nil")]
 
-  let find_str = List.Assoc.find_exn reserved_alist ~equal:(phys_equal)
+  let find_str = List.Assoc.find_exn reserved_alist ~equal:phys_equal
 
   let parse =
     let* reserved = spaces *> decide_reserved reserved_alist in
@@ -126,7 +123,7 @@ module Operator = struct
 
   let peek = spaces *> peek_reserved reserved_alist
 
-  let find_str = List.Assoc.find_exn reserved_alist ~equal:(phys_equal)
+  let find_str = List.Assoc.find_exn reserved_alist ~equal:phys_equal
 
   let token expected =
     let* found_op = parse in
@@ -137,6 +134,14 @@ module Operator = struct
     else
       return ()
 end
+
+let identifier =
+  let* id = spaces *> take_while1 is_alphanum in
+  match List.find Keyword.reserved_alist ~f:(fun (_, b) -> String.(b = id)) with
+  | None         -> return id
+  | Some (_, kw) -> fail (Printf.sprintf "Reserved keyword '%s'" kw)
+
+let type_id = identifier
 
 type literal =
   | Int of int
@@ -338,17 +343,16 @@ module AST = struct
                    <|> arr_create
                    <|> record_create
                    <|> exp_lvalue
-                   |> fix
 
-  let exp_oper texp =
-    let* left = expression in
+  let rec exp_oper exp =
+    let* left = expression exp in
     let* op = option None Op.peek in
     match op with
     | None -> return left
     | Some _ ->
        let* op = Op.parse in
-       let* right = texp in
        let oper = T.oper_of_op op in
+       let* right = exp_oper exp in
        return T.(ExpOp {left; oper; right})
 
   let top = fix exp_oper
