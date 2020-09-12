@@ -163,11 +163,12 @@ module AST = struct
     type symbol = string
 
     type lvalue = LvalueSimple of symbol
-             | LvalueField of lvalue * symbol
-             | LvalueSubscript of lvalue * exp
+                | LvalueField of lvalue * symbol
+                | LvalueSubscript of lvalue * exp
 
     and exp = ExpLvalue    of lvalue
             | ExpNil
+            | ExpNegate of exp
             | ExpInt    of int
             | ExpString of string
             | ExpCall   of { func: symbol; args: exp list }
@@ -190,7 +191,7 @@ module AST = struct
             | TypRecord of field list
             | TypArray of symbol
 
-    and oper = PlusOp | MinusOp | TimesOp | DivideOp | EqOp | NeqOp | LtOp | LeOp | GtOp | GeOp | AndOp
+    and oper = PlusOp | MinusOp | TimesOp | DivideOp | EqOp | NeqOp | LtOp | LeOp | GtOp | GeOp | AndOp | OrOp
 
     and field = {fname: symbol; escape: bool ref; ftyp:symbol }
 
@@ -208,6 +209,7 @@ module AST = struct
       | Greater    -> Some GtOp
       | Greater_Eq -> Some GeOp
       | And        -> Some AndOp
+      | Or         -> Some OrOp
       | _          -> None
   end
 
@@ -330,7 +332,10 @@ module AST = struct
   let int_lit _ = spaces *> int_l >>| fun x -> T.(ExpInt (Int.of_string x))
   let str_lit _ = spaces *> string_l >>| fun x -> T.(ExpString x)
 
-  let expression = exp_nil
+  let exp_neg exp = Op.(token Minus) *> exp >>| fun e -> T.(ExpNegate e)
+
+  let expression = exp_neg
+                   <|> exp_nil
                    <|> int_lit
                    <|> str_lit
                    <|> exp_break
