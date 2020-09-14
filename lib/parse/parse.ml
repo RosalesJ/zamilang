@@ -2,6 +2,7 @@ open Core
 open Angstrom
 open Common
 
+(* TODO: Implement comments in some way*)
 open struct
   let ( let* ) = Angstrom.(>>=)
   let return = Angstrom.return
@@ -74,7 +75,7 @@ module Keyword = struct
     | Some c when is_alphanum c -> fail "Not a keyword"
     | _ -> return reserved
 
-  let peek = spaces *> peek_reserved reserved_alist
+  let _peek = spaces *> peek_reserved reserved_alist
 
   let token expected =
     let* found_keyword = parse in
@@ -143,17 +144,17 @@ let identifier =
 
 let type_id = identifier
 
-type literal =
-  | Int of int
-  | String of string
-
-type token =
-  | Keyword of Keyword.t
-  | Operator of Operator.t
-  | Literal of literal
-  | Identifier of string
-  | Comment of string
-  | EOF
+(* type literal =
+ *   | Int of int
+ *   | String of string
+ * 
+ * type token =
+ *   | Keyword of Keyword.t
+ *   | Operator of Operator.t
+ *   | Literal of literal
+ *   | Identifier of string
+ *   | Comment of string
+ *   | EOF *)
 
 module AST = struct
   module Op = Operator
