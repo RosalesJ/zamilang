@@ -1,4 +1,2 @@
-open! Parse
-
-module Parse = Parse
+module Parse = Zam_parser
 module File = File
