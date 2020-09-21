@@ -1,13 +1,8 @@
-module AST : sig
-  module T :
-    sig
-      type symbol = string
-      type lvalue =
-          LvalueSimple of symbol
-        | LvalueField of lvalue * symbol
-        | LvalueSubscript of lvalue * exp
-      and exp =
-          ExpLvalue of lvalue
+type symbol = string
+type lvalue = LvalueSimple of symbol
+            | LvalueField of lvalue * symbol
+            | LvalueSubscript of lvalue * exp
+and exp = ExpLvalue of lvalue
         | ExpNil
         | ExpNegate of exp
         | ExpInt of int
@@ -23,29 +18,24 @@ module AST : sig
         | ExpBreak
         | ExpLet of { decs : dec list; body : exp list }
         | ExpArray of { typ : symbol; size : exp; init : exp }
-      and dec =
-          DecFunction of { funname : symbol; params : field list; result : symbol option; body : exp }
+and dec = DecFunction of { funname : symbol; params : field list; result : symbol option; body : exp }
         | DecVar of { name : symbol; escape : bool ref; typ : symbol option; init : exp }
         | DecType of { tyname : symbol; typ : typ }
-      and typ =
-          TypName of symbol
+and typ = TypName of symbol
         | TypRecord of field list
         | TypArray of symbol
-      and oper =
-          PlusOp
-        | MinusOp
-        | TimesOp
-        | DivideOp
-        | EqOp
-        | NeqOp
-        | LtOp
-        | LeOp
-        | GtOp
-        | GeOp
-        | AndOp
-        | OrOp
-      and field = { fname : symbol; escape : bool ref; ftyp : symbol }
-    end
-end
+and oper = PlusOp
+         | MinusOp
+         | TimesOp
+         | DivideOp
+         | EqOp
+         | NeqOp
+         | LtOp
+         | LeOp
+         | GtOp
+         | GeOp
+         | AndOp
+         | OrOp
+and field = { fname : symbol; escape : bool ref; ftyp : symbol }
 
-val parse : string -> (AST.T.exp, string) result
+val parse : string -> (exp, string) result
