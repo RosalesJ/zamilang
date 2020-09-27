@@ -13,7 +13,6 @@ type lvalue = LvalueSimple of symbol
 
 and exp = ExpLvalue    of lvalue
         | ExpNil
-        | ExpNegate of exp
         | ExpInt    of int
         | ExpString of string
         | ExpCall   of { func: symbol; args: exp list }
@@ -189,7 +188,9 @@ let exp_if exp =
 let int_lit _ = spaces *> int_l >>| fun x -> ExpInt (Int.of_string x)
 let str_lit _ = spaces *> string_l >>| fun x -> ExpString x
 
-let exp_neg exp = Op.(token Minus) *> exp >>| fun e -> ExpNegate e
+let exp_neg exp =
+  Op.(token Minus) *> exp >>| fun e ->
+  ExpOp { left = (ExpInt 0); oper = MinusOp; right = e }
 
 let expression = exp_neg
                  <|> exp_nil

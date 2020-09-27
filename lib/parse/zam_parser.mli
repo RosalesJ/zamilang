@@ -4,7 +4,6 @@ type lvalue = LvalueSimple of symbol
             | LvalueSubscript of lvalue * exp
 and exp = ExpLvalue of lvalue
         | ExpNil
-        | ExpNegate of exp
         | ExpInt of int
         | ExpString of symbol
         | ExpCall of { func : symbol; args : exp list }
