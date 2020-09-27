@@ -34,8 +34,6 @@ and oper = PlusOp
          | LeOp
          | GtOp
          | GeOp
-         | AndOp
-         | OrOp
 and field = { fname : symbol; escape : bool ref; ftyp : symbol }
 
 val parse : string -> (exp, string) result

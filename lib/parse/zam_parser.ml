@@ -36,26 +36,24 @@ and typ = TypName of symbol
         | TypRecord of field list
         | TypArray of symbol
 
-and oper = PlusOp | MinusOp | TimesOp | DivideOp | EqOp | NeqOp | LtOp | LeOp | GtOp | GeOp | AndOp | OrOp
+and oper = PlusOp | MinusOp | TimesOp | DivideOp | EqOp | NeqOp | LtOp | LeOp | GtOp | GeOp
 
 and field = {fname: symbol; escape: bool ref; ftyp:symbol }
 
 let oper_of_op =
   let open Operator in
   function
-  | Plus       -> Some PlusOp
-  | Minus      -> Some MinusOp
-  | Times      -> Some TimesOp
-  | Slash      -> Some DivideOp
-  | Eq         -> Some EqOp
-  | Not        -> Some NeqOp
-  | Less       -> Some LtOp
-  | Less_Eq    -> Some LeOp
-  | Greater    -> Some GtOp
-  | Greater_Eq -> Some GeOp
-  | And        -> Some AndOp
-  | Or         -> Some OrOp
-  | _          -> None
+  | Plus       -> PlusOp
+  | Minus      -> MinusOp
+  | Times      -> TimesOp
+  | Slash      -> DivideOp
+  | Eq         -> EqOp
+  | Not        -> NeqOp
+  | Less       -> LtOp
+  | Less_Eq    -> LeOp
+  | Greater    -> GtOp
+  | Greater_Eq -> GeOp
+  | _          -> failwith "Nothing lol"
 
 
 (* TODO: Implement comments in some way*)
@@ -210,19 +208,21 @@ let expression = exp_neg
                  <|> exp_lvalue
 
 let rec exp_oper exp =
-  let oper_peek : oper option t =
-    let* x = Op.peek in
-    let z = Option.bind ~f:oper_of_op x in
-    return z
+  let maybe_infix left =
+    let* op = Operator.parse in
+    let* right = exp_oper exp in
+    match op with
+    | Op.And -> return (ExpIf {test = right; body=right; else_body=(Some (ExpInt 0))})
+    | Op.Or  -> return (ExpIf {test = right; body=(ExpInt 1); else_body=(Some left)})
+    | x ->
+       try
+         let oper = oper_of_op x in
+         return (ExpOp {left; oper; right})
+       with Failure _ -> fail "No infix operator"
   in
+
   let* left = expression exp in
-  let* op = option None oper_peek in
-  match op with
-  | None -> return left
-  | Some oper ->
-     let* _ = Op.parse in
-     let* right = exp_oper exp in
-     return (ExpOp {left; oper; right})
+  option left (maybe_infix left)
 
 let top = fix exp_oper
 
