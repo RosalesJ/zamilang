@@ -7,11 +7,11 @@ module Kw = Keyword
 
 type symbol = string
 
-type lvalue = LvalueSimple of symbol
-            | LvalueField of lvalue * symbol
+type lvalue = LvalueSimple    of symbol
+            | LvalueField     of lvalue * symbol
             | LvalueSubscript of lvalue * exp
 
-and exp = ExpLvalue    of lvalue
+and exp = ExpLvalue of lvalue
         | ExpNil
         | ExpInt    of int
         | ExpString of string
@@ -28,12 +28,12 @@ and exp = ExpLvalue    of lvalue
         | ExpArray  of { typ: symbol; size: exp; init: exp }
 
 and dec = DecFunction of {funname: symbol; params: field list; result: symbol option; body: exp}
-        | DecVar of { name: symbol; escape: bool ref; typ: symbol option; init: exp }
-        | DecType of { tyname: symbol; typ: typ }
+        | DecVar      of { name: symbol; escape: bool ref; typ: symbol option; init: exp }
+        | DecType     of { tyname: symbol; typ: typ }
 
-and typ = TypName of symbol
+and typ = TypName   of symbol
         | TypRecord of field list
-        | TypArray of symbol
+        | TypArray  of symbol
 
 and oper = PlusOp | MinusOp | TimesOp | DivideOp | EqOp | NeqOp | LtOp | LeOp | GtOp | GeOp
 
@@ -60,14 +60,6 @@ open struct
     let ( let* ) = Angstrom.(>>=)
     let return = Angstrom.return
   end
-
-let identifier =
-  let* id = spaces *> take_while1 is_alphanum in
-  match List.find Keyword.reserved_alist ~f:(fun (_, b) -> String.(b = id)) with
-  | None         -> return id
-  | Some (_, kw) -> fail (Printf.sprintf "Reserved keyword '%s'" kw)
-
-let type_id = identifier
 
 let (<|>) a b = fun x -> a x <|> b x
 
@@ -185,8 +177,8 @@ let exp_if exp =
   let* else_body = option None ((Kw.(token Else) *> exp) >>| fun x -> Some x) in
   return (ExpIf {test; body; else_body})
 
-let int_lit _ = spaces *> int_l >>| fun x -> ExpInt (Int.of_string x)
-let str_lit _ = spaces *> string_l >>| fun x -> ExpString x
+let int_lit _ = int_literal >>| fun x -> ExpInt (Int.of_string x)
+let str_lit _ = string_literal >>| fun x -> ExpString x
 
 let expression = exp_nil
                  <|> int_lit
