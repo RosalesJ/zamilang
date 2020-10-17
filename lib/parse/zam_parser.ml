@@ -177,12 +177,17 @@ let exp_if exp =
   let* else_body = option None ((Kw.(token Else) *> exp) >>| fun x -> Some x) in
   return (ExpIf {test; body; else_body})
 
+let exp_neg exp =
+  Op.(token Minus) *> exp >>| fun e ->
+  ExpOp { left = (ExpInt 0); oper = MinusOp; right = e}
+
 let int_lit _ = int_literal >>| fun x -> ExpInt (Int.of_string x)
 let str_lit _ = string_literal >>| fun x -> ExpString x
 
 let expression = exp_nil
                  <|> int_lit
                  <|> str_lit
+                 <|> exp_neg
                  <|> exp_break
                  <|> exp_if
                  <|> exp_for
