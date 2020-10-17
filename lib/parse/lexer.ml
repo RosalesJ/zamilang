@@ -26,8 +26,6 @@ let string_literal = spaces *> char '"' *> take_while (function '"' -> false | _
 
 let int_literal = spaces *> take_while1 is_digit
 
-
-
 module Keyword = struct
   type t =
     | While
@@ -119,7 +117,6 @@ module Operator = struct
     else
       return ()
 end
-
 
 let identifier =
   let* id = spaces *> take_while1 is_alphanum in
