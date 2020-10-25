@@ -17,9 +17,11 @@ and exp = ExpLvalue of lvalue
         | ExpBreak
         | ExpLet of { decs : dec list; body : exp list }
         | ExpArray of { typ : symbol; size : exp; init : exp }
-and dec = DecFunction of { funname : symbol; params : field list; result : symbol option; body : exp }
-        | DecVar of { name : symbol; escape : bool ref; typ : symbol option; init : exp }
-        | DecType of { tyname : symbol; typ : typ }
+and dec = DecFunction of fundec list
+        | DecVar of { name : symbol; escape : bool ref; typ : symbol option; init : exp; }
+        | DecType of tydec list
+and fundec = { funname: symbol; params: field list; result: symbol option; body: exp }
+and tydec = { tyname: symbol; typ: typ }
 and typ = TypName of symbol
         | TypRecord of field list
         | TypArray of symbol

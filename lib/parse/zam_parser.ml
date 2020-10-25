@@ -27,9 +27,13 @@ and exp = ExpLvalue of lvalue
         | ExpLet    of { decs: dec list; body: exp list }
         | ExpArray  of { typ: symbol; size: exp; init: exp }
 
-and dec = DecFunction of {funname: symbol; params: field list; result: symbol option; body: exp}
+and dec = DecFunction of fundec list
         | DecVar      of { name: symbol; escape: bool ref; typ: symbol option; init: exp }
-        | DecType     of { tyname: symbol; typ: typ }
+        | DecType     of tydec list
+
+and fundec = { funname: symbol; params: field list; result: symbol option; body: exp }
+
+and tydec = { tyname: symbol; typ: typ }
 
 and typ = TypName   of symbol
         | TypRecord of field list
@@ -80,11 +84,14 @@ let var_dec exp =
 
 
 let fun_dec exp =
-  let* funname = Kw.(token Function) *> identifier in
-  let* params = Op.(token L_Paren *> sep_by (token Comma) field_dec <* token R_Paren) in
-  let* result = type_decorator in
-  let* body = Op.(token Eq) *> exp in
-  return (DecFunction { funname; params; result; body })
+  let fun_single =
+    let* funname = Kw.(token Function) *> identifier in
+    let* params = Op.(token L_Paren *> sep_by (token Comma) field_dec <* token R_Paren) in
+    let* result = type_decorator in
+    let* body = Op.(token Eq) *> exp in
+    return { funname; params; result; body }
+  in
+  many1 fun_single >>| fun x -> DecFunction x
 
 let ty =
   let open Angstrom in
@@ -94,9 +101,12 @@ let ty =
   arr_ty <|> rec_ty <|> name_ty
 
 let ty_dec _ =
-  let* tyname = Kw.(token Type) *> type_id in
-  let* typ = Op.(token Eq) *> ty in
-  return (DecType {tyname; typ})
+  let ty_single =
+    let* tyname = Kw.(token Type) *> type_id in
+    let* typ = Op.(token Eq) *> ty in
+    return { tyname; typ }
+  in
+  many1 ty_single >>| fun x -> DecType x
 
 let dec = ty_dec <|> fun_dec <|> var_dec
 
