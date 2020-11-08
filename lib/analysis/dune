@@ -1,0 +1,4 @@
+(library
+ (name analysis)
+ (libraries core common)
+ (preprocess (pps ppx_jane)))
