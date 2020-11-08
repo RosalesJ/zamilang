@@ -1,8 +1,8 @@
 type symbol = string
-type lvalue = LvalueSimple of symbol
-            | LvalueField of lvalue * symbol
-            | LvalueSubscript of lvalue * exp
-and exp = ExpLvalue of lvalue
+type var = VarSimple of symbol
+         | VarField of var * symbol
+         | VarSubscript of var * exp
+and exp = ExpVar of var
         | ExpNil
         | ExpInt of int
         | ExpString of symbol
@@ -10,7 +10,7 @@ and exp = ExpLvalue of lvalue
         | ExpOp of { left : exp; oper : oper; right : exp }
         | ExpRecord of { fields : (symbol * exp) list; typ : symbol }
         | ExpSeq of exp list
-        | ExpAssign of { var : lvalue; exp : exp }
+        | ExpAssign of { var : var; exp : exp }
         | ExpIf of { test : exp; body : exp; else_body : exp option }
         | ExpWhile of { test : exp; body : exp }
         | ExpFor of { var : symbol; escape : bool ref; lo : exp; hi : exp; body : exp }
@@ -25,16 +25,16 @@ and tydec = { tyname: symbol; typ: typ }
 and typ = TypName of symbol
         | TypRecord of field list
         | TypArray of symbol
-and oper = PlusOp
-         | MinusOp
-         | TimesOp
-         | DivideOp
-         | EqOp
-         | NeqOp
-         | LtOp
-         | LeOp
-         | GtOp
-         | GeOp
+and oper = OpPlus
+         | OpMinus
+         | OpTimes
+         | OpDivide
+         | OpEq
+         | OpNeq
+         | OpLt
+         | OpLe
+         | OpGt
+         | OpGe
 and field = { fname : symbol; escape : bool ref; ftyp : symbol }
 
 val parse : string -> (exp, string) result
